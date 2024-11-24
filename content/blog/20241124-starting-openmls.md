@@ -5,18 +5,27 @@ date = 2024-11-24
 
 Hey there, I'm Sam.
 
-After several false starts trying to develop on top of OpenMLS I decided a good way to motivate myself to create a full application
-was to turn it into a tutorial. Th
+After several false starts trying to develop ontop of OpenMLS I decided a good way to motivate myself to create a full application
+was to turn it into a tutorial.
 
-I'm writing this tutorial because I found the official OpenMLS book lacking in detail in a few key areas, and also so that I am
-more motivated to learn OpenMLS myself.
+So this is it.
+
+## What is (Open)MLS
+
+Message Layer Security (MLS) is a relatively new protocol aimed at providing a security layer for end-to-end encrypted (E2EE) applications.
+It uses some pretty fancy data structures and algorithms in order to achieve a great number of security properties for group conversations
+without compromising on performance. I've used the word "conversations" here, but the application doens't need to be limited to just chat. You
+can perhaps imagine many kinds of application that might want to share encrypted messages amongst a group of people. Examples might include an
+E2EE document editor, where each "chat message" is actually an edit to a document, or a calendar app, where users can share their calendars
+with groups of friends confidentially.
 
 ## Disclaimer
 
-These posts are for a fairly niche group; people who want to implement their own end-to-end encrypted applications on top of MLS.
-In order for this to be a smooth experience for those folks I'm going to skip over some fundementals listed here:
+This tutorial is for a fairly niche group; people who want to implement their own end-to-end encrypted applications on top of MLS.
+In order for this to (hopefully) be a smooth experience, I'm going to skip explaining quite a few concepts. Theseq
 
 - Rust development, to an intermediate level
+- Many aspects of security engineering
 - Asymetric cryptographic primatives
 # TODO add more as we come across them
 
