@@ -19,6 +19,9 @@ can perhaps imagine many kinds of application that might want to share encrypted
 E2EE document editor, where each "chat message" is actually an edit to a document, or a calendar app, where users can share their calendars
 with groups of friends confidentially.
 
+Futher reading:
+https://messaginglayersecurity.rocks/mls-architecture/draft-ietf-mls-architecture.html
+
 OpenMLS is an open source implementation of the MLS specification in the Rust programming language.
 
 ## Disclaimer
@@ -55,7 +58,7 @@ Before we dig into MLS we need to create the scaffolding of our project.
 
 Create a directory with the name `cipher-chat` (or whatever you'd like to call it) and add the following workspace `Cargo.toml`.
 
-```toml
+```toml,linenos
 [workspace]
 resolver = "2"
 
@@ -80,14 +83,10 @@ sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
 
 Now we're going to create three workspace crates:
 - `client` which will be the command-line chat tool
-- `server` which will act as both the authentication and delivery service.
-- `common` for shared components
+- `server` which will be our API, from the MLS architecture document this will act as *both* the authentication and delivery services
+- `common` for shared components such as forms to be sent from the client to the server.
 
-Let's create those now:
-
-```shell
-cargo new --lib common && cargo new client && cargo new server
-```
+Let's create those now with `cargo new --lib common && cargo new client && cargo new server`
 
 This should add the new crates to the `workspace.members` section in your workspace Cargo.toml.
 
@@ -101,7 +100,7 @@ to `client/Cargo.toml` and create a new file: `client/src/cli.rs`.
 
 Our `cli.rs` module will look like this:
 
-```rust
+```rust,linenos
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
@@ -112,7 +111,7 @@ pub struct Cli {
     #[clap(long)]
     pub api_url: Url,
     #[clap(long)]
-    pub user_db: PathBuf,
+    pub user_db_path: PathBuf,
     #[clap(subcommand)]
     pub command: Command,
 }
@@ -130,13 +129,17 @@ pub enum Command {
 ```
 
 You can see we've created a new `Cli` structure with two required flags `api_url`, which is hopefully self-explainitory
-and `user_db` which will be a path to SQLite database containing the users data. Each user will have their own database
-and during testing it is how we will differentiate between which clients we're impersonating. If that isn't clear right now
-it should become clearer later on, when we start testing our project.
+and `user_db` which will be a path to SQLite database containing the users data.
+
+Each user will have their own database and during testing it is how we will differentiate between which clients we're impersonating.
+If that isn't clear right now it should become clearer later on, when we start testing our project. I'm not going to address at-rest
+encryption of the users database in this tutorial, since exactly how it's done would depend on your use case and threat model.
+In the past I've used SQLCipher, which is a popular open source extension to SQLite that transparently encrypts the database
+as it is written to disk. It's easy to use and widely deployed in the real world.
 
 Now that we have some CLI arguments defined we need to update `main.rs` to parse those arguments and select an action based on the command.
 
-```rust
+```rust,linenos
 use clap::Parser as _;
 use cli::{Cli, Command};
 
@@ -167,3 +170,28 @@ right now would just result in a panic and `not yet implemented` being printed.
 Time to go onto the server.
 
 ## Scaffolding the Server
+
+We're going to structure the server crate in largely the same way as the client. First add `tokio`, `axum`, and `clap` as workspace
+dependencies to `server/Cargo.toml` in the same fashion as before. Then we will get onto creating our CLI in `server/src/cli.rs`
+
+```rust,linenos
+use std::path::PathBuf;
+
+use clap::{Parser, Subcommand};
+
+#[derive(Parser)]
+pub struct Cli {
+    #[clap(long)]
+    pub db_path: PathBuf,
+    #[clap(subcommand)]
+    pub command: Command,
+}
+
+#[derive(Subcommand)]
+pub enum Command {
+    Initialize {},
+    Start {},
+}
+```
+
+We're also going to use a SQLite database on the server to store user details, encrypted messages, etc.
