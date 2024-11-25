@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+        <loc>https://itsibitzi.dev/</loc>
+    </url>
+    <url>
+        <loc>https://itsibitzi.dev/blog/</loc>
+    </url>
+    <url>
+        <loc>https://itsibitzi.dev/blog/openmls-tutorial/</loc>
+        <lastmod>2024-11-24</lastmod>
+    </url>
+</urlset>
