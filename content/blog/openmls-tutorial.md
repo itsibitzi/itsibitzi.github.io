@@ -67,12 +67,15 @@ color-eyre = "0.6.3"
 clap = { version = "4.5.21", features = ["derive"] }
 
 # We're going to use axum in our server and reqwest in our client to send
-# messages, which will be serialized as JSON.
+# messages, which will be serialized as JSON. Both clients and servers
+# will store their data in SQLite databases
 tokio = { version = "1.41.1", features = ["full"] }
 axum = "0.7.9"
 reqwest = "0.12.9"
 serde = { version = "1.0.215", features = ["derive"] }
 serde_json = "1.0.113"
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
+
 ```
 
 Now we're going to create three workspace crates:
@@ -99,12 +102,17 @@ to `client/Cargo.toml` and create a new file: `client/src/cli.rs`.
 Our `cli.rs` module will look like this:
 
 ```rust
+use std::path::PathBuf;
+
 use clap::{Parser, Subcommand};
 use reqwest::Url;
 
 #[derive(Parser)]
 pub struct Cli {
+    #[clap(long)]
     pub api_url: Url,
+    #[clap(long)]
+    pub user_db: PathBuf,
     #[clap(subcommand)]
     pub command: Command,
 }
@@ -121,7 +129,12 @@ pub enum Command {
 }
 ```
 
-And then we can update `main.rs` to parse those arguments and select an action based on the command.
+You can see we've created a new `Cli` structure with two required flags `api_url`, which is hopefully self-explainitory
+and `user_db` which will be a path to SQLite database containing the users data. Each user will have their own database
+and during testing it is how we will differentiate between which clients we're impersonating. If that isn't clear right now
+it should become clearer later on, when we start testing our project.
+
+Now that we have some CLI arguments defined we need to update `main.rs` to parse those arguments and select an action based on the command.
 
 ```rust
 use clap::Parser as _;
@@ -143,3 +156,14 @@ fn main() {
     }
 }
 ```
+
+As you can see, for now we're not handling loading the database, checking the API for liveness, or handling any kind of command.
+We will fill in these capabilities as we go along.
+
+Phew, so that's our basic client done. You can check to see if there are any mistakes now by running
+`cargo run --bin client -- --help`. Your application should compile and print a help message. Running any of the other commands
+right now would just result in a panic and `not yet implemented` being printed.
+
+Time to go onto the server.
+
+## Scaffolding the Server
