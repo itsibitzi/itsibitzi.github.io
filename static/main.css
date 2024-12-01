@@ -1,12 +1,52 @@
+/**/
+/* My things */
+/**/
+
+@font-face {
+    font-family: "AtkinsonHyperlegible";
+    src: url("/fonts/AtkinsonHyperlegible-Regular.ttf") format("truetype");
+    font-weight: normal;
+}
+@font-face {
+    font-family: "AtkinsonHyperlegible";
+    src: url("/fonts/AtkinsonHyperlegible-Bold.ttf") format("truetype");
+    font-weight: bold;
+}
+@font-face {
+    font-family: "AtkinsonHyperlegible";
+    src: url("/fonts/AtkinsonHyperlegible-BoldItalic.ttf") format("truetype");
+    font-weight: bold;
+    font-style: italic;
+}
+@font-face {
+    font-family: "AtkinsonHyperlegible";
+    src: url("/fonts/AtkinsonHyperlegible-Italic.ttf") format("truetype");
+    font-weight: normal;
+    font-style: italic;
+}
+
+body {
+    font-family: "AtkinsonHyperlegible", system-ui, sans-serif;
+}
+
+h1 {
+    font-size: 1.7em;
+}
+
 section {
     margin-left: 4em;
     width: 60em;
 }
 
+/**/
+/* Code stuff copied from zola website */
+/**/
+
 pre {
     padding: 1rem;
     overflow: auto;
 }
+
 /* The line numbers already provide some kind of left/right padding */
 pre[data-linenos] {
     padding: 1rem 0;

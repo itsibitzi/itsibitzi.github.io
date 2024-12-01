@@ -1,5 +1,5 @@
 +++
-title = "Creating a complete end-to-end encrypted chat app, in Rust, using OpenMLS"
+title = "OpenMLS Tutorial Part 1: Project Scaffolding"
 date = 2024-11-24
 +++
 
