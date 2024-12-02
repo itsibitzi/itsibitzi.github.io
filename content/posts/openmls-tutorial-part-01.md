@@ -3,8 +3,6 @@ title = "OpenMLS Tutorial Part 1: Project Scaffolding"
 date = 2024-11-24
 +++
 
-Hey there, I'm Sam.
-
 After several false starts trying to develop on top of OpenMLS I decided a good way to motivate myself to create a full application
 was to turn it into a tutorial.
 
