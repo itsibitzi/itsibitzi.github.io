@@ -161,7 +161,7 @@ use crate::{
 };
 
 pub struct Document {
-    pub feed_id: Uuid,
+    feed_id: Uuid,
     cursor: usize,
     total_chars: usize,
     inner: AutoCommit,
