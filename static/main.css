@@ -36,9 +36,23 @@ h1 {
 
 section {
     margin-left: 4em;
-    width: 60em;
+    max-width: 60em;
+    margin-right: 4em;
 }
 
+blockquote {
+    background: burlywood;
+}
+
+blockquote > p {
+    padding: 0.5rem;
+}
+
+.video {
+    margin-left: 10%;
+    width: 80%;
+    aspect-ratio: 16 / 9;
+}
 /**/
 /* Code stuff copied from zola website */
 /**/
