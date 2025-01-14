@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>Sam Cutler's Website</title>
+        <link rel="stylesheet" type="text/css" href="/main.css" />
+    </head>
+
+    <body>
+        <section>
+<h1>OpenMLS Tutorial Part 1: Project Scaffolding</h1>
+<p><time>2024-11-24</time></p>
+<div lang="en-GB"><p>After several false starts trying to develop on top of OpenMLS I decided a good way to motivate myself to create a full application
+was to turn it into a tutorial.</p>
+<p>So this is it.</p>
+<h2 id="what-is-open-mls">What is (Open)MLS</h2>
+<p>Message Layer Security (MLS) is a relatively new protocol aimed at providing a security layer for end-to-end encrypted (E2EE) applications.
+It uses some pretty fancy data structures and algorithms in order to achieve a great number of security properties for group conversations
+without compromising on performance. I've used the word "conversations" here, but the application doesn't need to be limited to just chat. You
+can perhaps imagine many kinds of application that might want to share encrypted messages amongst a group of people. Examples might include an
+E2EE document editor, where each "chat message" is actually an edit to a document, or a calendar app, where users can share their calendars
+with groups of friends confidentially.</p>
+<p>Futher reading:
+https://messaginglayersecurity.rocks/mls-architecture/draft-ietf-mls-architecture.html</p>
+<p>OpenMLS is an open source implementation of the MLS specification in the Rust programming language.</p>
+<h2 id="disclaimer">Disclaimer</h2>
+<p>I provide no guarantee that any of the code produced in this tutorial is secure or fit for any purpose other than
+learning about the OpenMLS library. I'm going to cut a lot of corners in order to keep this managable.</p>
+<blockquote>
+<p>I will flag when we come across a situation where I'm taking shortcuts using indented text like this.
+Some sections may include references to further reading or just food for thought, but like I say, I don't make
+any guarantees that the code in this article is secure or should be used for anything serious.</p>
+</blockquote>
+<p>Please, for the sake of your users, do not copy any of this code into any real world application.</p>
+<p>This tutorial is for a fairly niche group; people who want to implement their own end-to-end encrypted applications on top of MLS.
+In order for this to (hopefully) be a smooth experience, I'm going to skip explaining quite a few concepts.</p>
+<p>If you're already convinced that you need something like MLS, and would like to have somewhere to start with
+OpenMLS specifically, then this blog post probably is for you.</p>
+<h2 id="project-description">Project Description</h2>
+<p>Throughout this tutorial we will be creating an encrypted chat application. It's not exactly the most creative choice for
+working with MLS but hopefully everybody reading should be familiar with the kinds of thing you'd expect out of an encrypted chat
+client. Perhaps less conventionally, we will be creating this application as a command-line app. This is purely so that we don't end
+up getting caught in the weeds creating a user interface. We will use Rust's <code>clap</code> library to create a basic set of commands which users
+can call in order to perform the basic operations.</p>
+<ul>
+<li>Register an account with a username and password.</li>
+<li>Add friends by their usernames</li>
+<li>Create, view, and update groups</li>
+<li>Send messages</li>
+<li>Update your username and status</li>
+</ul>
+<p>Rather uncreatively, I've decided to name my tool <code>cipher-chat</code>, but you're free to call yours whatever you want, just change the names accordingly.</p>
+<h1 id="let-s-go">Let's go!</h1>
+<p>Before we dig into MLS we need to create the scaffolding of our project.</p>
+<h3 id="creating-the-workspace">Creating the workspace</h3>
+<p>Create a directory with the name <code>cipher-chat</code> (or whatever you'd like to call it) and add the following workspace <code>Cargo.toml</code>.</p>
+<pre data-linenos data-lang="toml" style="background-color:#2b303b;color:#c0c5ce;" class="language-toml "><code class="language-toml" data-lang="toml"><table><tbody><tr><td>1</td><td><span>[workspace]
+</span></td></tr><tr><td>2</td><td><span style="color:#bf616a;">resolver </span><span>= &quot;</span><span style="color:#a3be8c;">2</span><span>&quot;
+</span></td></tr><tr><td>3</td><td><span>
+</span></td></tr><tr><td>4</td><td><span>[workspace.dependencies]
+</span></td></tr><tr><td>5</td><td><span style="color:#65737e;"># For simplicity I&#39;m going to use the eyre library for everything
+</span></td></tr><tr><td>6</td><td><span style="color:#bf616a;">color-eyre </span><span>= &quot;</span><span style="color:#a3be8c;">0.6.3</span><span>&quot;
+</span></td></tr><tr><td>7</td><td><span>
+</span></td></tr><tr><td>8</td><td><span style="color:#65737e;"># Our client CLI wil be set up with the excellent clap crate.
+</span></td></tr><tr><td>9</td><td><span style="color:#bf616a;">clap </span><span>= { </span><span style="color:#bf616a;">version </span><span>= &quot;</span><span style="color:#a3be8c;">4.5.21</span><span>&quot;, </span><span style="color:#bf616a;">features </span><span>= [&quot;</span><span style="color:#a3be8c;">derive</span><span>&quot;] }
+</span></td></tr><tr><td>10</td><td><span>
+</span></td></tr><tr><td>11</td><td><span style="color:#65737e;"># We&#39;re going to use axum in our server and reqwest in our client to send
+</span></td></tr><tr><td>12</td><td><span style="color:#65737e;"># messages, which will be serialized as JSON. Both clients and servers
+</span></td></tr><tr><td>13</td><td><span style="color:#65737e;"># will store their data in SQLite databases
+</span></td></tr><tr><td>14</td><td><span style="color:#bf616a;">tokio </span><span>= { </span><span style="color:#bf616a;">version </span><span>= &quot;</span><span style="color:#a3be8c;">1.41.1</span><span>&quot;, </span><span style="color:#bf616a;">features </span><span>= [&quot;</span><span style="color:#a3be8c;">full</span><span>&quot;] }
+</span></td></tr><tr><td>15</td><td><span style="color:#bf616a;">axum </span><span>= &quot;</span><span style="color:#a3be8c;">0.7.9</span><span>&quot;
+</span></td></tr><tr><td>16</td><td><span style="color:#bf616a;">reqwest </span><span>= &quot;</span><span style="color:#a3be8c;">0.12.9</span><span>&quot;
+</span></td></tr><tr><td>17</td><td><span style="color:#bf616a;">serde </span><span>= { </span><span style="color:#bf616a;">version </span><span>= &quot;</span><span style="color:#a3be8c;">1.0.215</span><span>&quot;, </span><span style="color:#bf616a;">features </span><span>= [&quot;</span><span style="color:#a3be8c;">derive</span><span>&quot;] }
+</span></td></tr><tr><td>18</td><td><span style="color:#bf616a;">serde_json </span><span>= &quot;</span><span style="color:#a3be8c;">1.0.113</span><span>&quot;
+</span></td></tr><tr><td>19</td><td><span style="color:#bf616a;">sqlx </span><span>= { </span><span style="color:#bf616a;">version </span><span>= &quot;</span><span style="color:#a3be8c;">0.8</span><span>&quot;, </span><span style="color:#bf616a;">features </span><span>= [&quot;</span><span style="color:#a3be8c;">runtime-tokio</span><span>&quot;, &quot;</span><span style="color:#a3be8c;">sqlite</span><span>&quot;] }
+</span></td></tr><tr><td>20</td><td><span>
+</span></td></tr></tbody></table></code></pre>
+<p>I'm going to define every dependency in the workspace <code>Cargo.toml</code> and each package will import them using <code>crate-name.workspace = true</code>.</p>
+<p>Now, from the workspace root, we're going to create three more crates:</p>
+<ul>
+<li><code>client</code> which will be the command-line chat tool</li>
+<li><code>server</code> which will be our API, from the MLS architecture document this will act as <em>both</em> the authentication and delivery services</li>
+<li><code>common</code> for shared components such as forms to be sent from the client to the server.</li>
+</ul>
+<p>Let's create those now with <code>cargo new --lib common &amp;&amp; cargo new client &amp;&amp; cargo new server</code></p>
+<p>This should add the new crates to the <code>workspace.members</code> section in your workspace Cargo.toml.</p>
+<h2 id="creating-the-client">Creating the client</h2>
+<p>Now that we have our workspace more or less sorted (we'll add some more stuff to it shortly) we can create our
+client application.</p>
+<p>To begin, we will just stub out all the commands that we will need. Add <code>clap.workspace = true</code> and <code>reqwest.workspace = true</code>
+to <code>client/Cargo.toml</code> and create a new file: <code>client/src/cli.rs</code>.</p>
+<p>Our <code>cli.rs</code> module will look like this:</p>
+<pre data-linenos data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><table><tbody><tr><td>1</td><td><span style="color:#b48ead;">use </span><span>std::path::PathBuf;
+</span></td></tr><tr><td>2</td><td><span>
+</span></td></tr><tr><td>3</td><td><span style="color:#b48ead;">use </span><span>clap::{Parser, Subcommand};
+</span></td></tr><tr><td>4</td><td><span style="color:#b48ead;">use </span><span>reqwest::Url;
+</span></td></tr><tr><td>5</td><td><span>
+</span></td></tr><tr><td>6</td><td><span>#[</span><span style="color:#bf616a;">derive</span><span>(Parser)]
+</span></td></tr><tr><td>7</td><td><span style="color:#b48ead;">pub struct </span><span>Cli {
+</span></td></tr><tr><td>8</td><td><span>    #[</span><span style="color:#bf616a;">clap</span><span>(long)]
+</span></td></tr><tr><td>9</td><td><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">api_url</span><span>: Url,
+</span></td></tr><tr><td>10</td><td><span>    #[</span><span style="color:#bf616a;">clap</span><span>(long)]
+</span></td></tr><tr><td>11</td><td><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">user_db_path</span><span>: PathBuf,
+</span></td></tr><tr><td>12</td><td><span>    #[</span><span style="color:#bf616a;">clap</span><span>(subcommand)]
+</span></td></tr><tr><td>13</td><td><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">command</span><span>: Command,
+</span></td></tr><tr><td>14</td><td><span>}
+</span></td></tr><tr><td>15</td><td><span>
+</span></td></tr><tr><td>16</td><td><span>#[</span><span style="color:#bf616a;">derive</span><span>(Subcommand)]
+</span></td></tr><tr><td>17</td><td><span style="color:#b48ead;">pub enum </span><span>Command {
+</span></td></tr><tr><td>18</td><td><span>    Register {},
+</span></td></tr><tr><td>19</td><td><span>    AddFriend {},
+</span></td></tr><tr><td>20</td><td><span>    CreateGroup {},
+</span></td></tr><tr><td>21</td><td><span>    ViewGroupMessages {},
+</span></td></tr><tr><td>22</td><td><span>    AddToGroup {},
+</span></td></tr><tr><td>23</td><td><span>    SendMessageToGroup {},
+</span></td></tr><tr><td>24</td><td><span>    UpdateStatus {},
+</span></td></tr><tr><td>25</td><td><span>}
+</span></td></tr></tbody></table></code></pre>
+<p>You can see we've created a new <code>Cli</code> structure with two required flags <code>api_url</code>, which is hopefully self-explainitory
+and <code>user_db</code> which will be a path to SQLite database containing the users data.</p>
+<p>Each user will have their own database and during testing it is how we will differentiate between which clients we're impersonating.
+If that isn't clear right now it should become clearer later on, when we start testing our project.</p>
+<blockquote>
+<p>I'm not going to address at-rest encryption of the users database in this tutorial, since exactly how it's done would depend on your
+use case and threat model. In the past I've used SQLCipher, which is a popular open source extension to SQLite that transparently
+encrypts database pages as they are written to disk. It's easy to use and widely deployed in the real world. If you need some other
+security features (such as plausible deniability provided physical access to the user device) then you might need to come up with a
+more custom solution.</p>
+</blockquote>
+<p>Now that we have some CLI arguments defined we need to update <code>main.rs</code> to parse those arguments and select an action based on the command.</p>
+<pre data-linenos data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><table><tbody><tr><td>1</td><td><span style="color:#b48ead;">use </span><span>clap::Parser as _;
+</span></td></tr><tr><td>2</td><td><span style="color:#b48ead;">use </span><span>cli::{Cli, Command};
+</span></td></tr><tr><td>3</td><td><span>
+</span></td></tr><tr><td>4</td><td><span style="color:#b48ead;">mod </span><span>cli;
+</span></td></tr><tr><td>5</td><td><span>
+</span></td></tr><tr><td>6</td><td><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">main</span><span>() {
+</span></td></tr><tr><td>7</td><td><span>    </span><span style="color:#b48ead;">let</span><span> cli = Cli::parse();
+</span></td></tr><tr><td>8</td><td><span>
+</span></td></tr><tr><td>9</td><td><span>    </span><span style="color:#b48ead;">match</span><span> cli.command {
+</span></td></tr><tr><td>10</td><td><span>        Command::Register {} =&gt; todo!(),
+</span></td></tr><tr><td>11</td><td><span>        Command::AddFriend {} =&gt; todo!(),
+</span></td></tr><tr><td>12</td><td><span>        Command::CreateGroup {} =&gt; todo!(),
+</span></td></tr><tr><td>13</td><td><span>        Command::ViewGroupMessages {} =&gt; todo!(),
+</span></td></tr><tr><td>14</td><td><span>        Command::AddToGroup {} =&gt; todo!(),
+</span></td></tr><tr><td>15</td><td><span>        Command::SendMessageToGroup {} =&gt; todo!(),
+</span></td></tr><tr><td>16</td><td><span>        Command::UpdateStatus {} =&gt; todo!(),
+</span></td></tr><tr><td>17</td><td><span>    }
+</span></td></tr><tr><td>18</td><td><span>}
+</span></td></tr></tbody></table></code></pre>
+<p>As you can see, for now we're not handling loading the database, checking the API for liveness, or handling any kind of command.
+We will fill in these capabilities as we go along.</p>
+<p>Phew, so that's our basic client done. You can check to see if there are any mistakes now by running
+<code>cargo run --bin client -- --help</code>. Your application should compile and print a help message. Running any of the other commands
+right now would just result in a panic and <code>not yet implemented</code> being printed.</p>
+<p>Time to go onto the server.</p>
+<h2 id="scaffolding-the-server">Scaffolding the Server</h2>
+<p>We're going to structure the server crate in largely the same way as the client. First add <code>color-eyre</code>, <code>tokio</code>, <code>axum</code>, and <code>clap</code> as workspace
+dependencies to <code>server/Cargo.toml</code> in the same fashion as before. Then we will get onto creating our CLI in <code>server/src/cli.rs</code></p>
+<pre data-linenos data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><table><tbody><tr><td>1</td><td><span style="color:#b48ead;">use </span><span>std::{net::SocketAddrV4, path::PathBuf};
+</span></td></tr><tr><td>2</td><td><span>
+</span></td></tr><tr><td>3</td><td><span style="color:#b48ead;">use </span><span>clap::Parser;
+</span></td></tr><tr><td>4</td><td><span>
+</span></td></tr><tr><td>5</td><td><span>#[</span><span style="color:#bf616a;">derive</span><span>(Parser)]
+</span></td></tr><tr><td>6</td><td><span style="color:#b48ead;">pub struct </span><span>Cli {
+</span></td></tr><tr><td>7</td><td><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">db_path</span><span>: PathBuf,
+</span></td></tr><tr><td>8</td><td><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">listen_on</span><span>: SocketAddrV4,
+</span></td></tr><tr><td>9</td><td><span>}
+</span></td></tr><tr><td>10</td><td><span>
+</span></td></tr></tbody></table></code></pre>
+<p>Our server CLI is a bit more straight forward.</p>
+<p>Like with the <code>client</code>, we're going to use a SQLite database on the server, this time to store user details, encrypted messages, etc.</p>
+<p>Now that we have the basic command line interface for the server defined, we can move onto updating it's <code>main.rs</code>.</p>
+<pre data-linenos data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><table><tbody><tr><td>1</td><td><span style="color:#b48ead;">use </span><span>axum::{routing::get, Router};
+</span></td></tr><tr><td>2</td><td><span style="color:#b48ead;">use </span><span>clap::Parser as _;
+</span></td></tr><tr><td>3</td><td><span style="color:#b48ead;">use </span><span>cli::Cli;
+</span></td></tr><tr><td>4</td><td><span>
+</span></td></tr><tr><td>5</td><td><span style="color:#b48ead;">mod </span><span>cli;
+</span></td></tr><tr><td>6</td><td><span>
+</span></td></tr><tr><td>7</td><td><span>#[</span><span style="color:#bf616a;">tokio</span><span>::</span><span style="color:#bf616a;">main</span><span>]
+</span></td></tr><tr><td>8</td><td><span>async </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">main</span><span>() -&gt; color_eyre::Result&lt;()&gt; {
+</span></td></tr><tr><td>9</td><td><span>    color_eyre::install()?;
+</span></td></tr><tr><td>10</td><td><span>
+</span></td></tr><tr><td>11</td><td><span>    </span><span style="color:#b48ead;">let</span><span> cli = Cli::parse();
+</span></td></tr><tr><td>12</td><td><span>
+</span></td></tr><tr><td>13</td><td><span>    </span><span style="color:#b48ead;">let</span><span> app = Router::new().</span><span style="color:#96b5b4;">route</span><span>(&quot;</span><span style="color:#a3be8c;">/</span><span>&quot;, </span><span style="color:#96b5b4;">get</span><span>(|| async { &quot;</span><span style="color:#a3be8c;">hello cipher-chat!</span><span>&quot; }));
+</span></td></tr><tr><td>14</td><td><span>
+</span></td></tr><tr><td>15</td><td><span>    </span><span style="color:#b48ead;">let</span><span> listener = tokio::net::TcpListener::bind(cli.listen_on).await?;
+</span></td></tr><tr><td>16</td><td><span>
+</span></td></tr><tr><td>17</td><td><span>    axum::serve(listener, app).await?;
+</span></td></tr><tr><td>18</td><td><span>
+</span></td></tr><tr><td>19</td><td><span>    Ok(())
+</span></td></tr><tr><td>20</td><td><span>}
+</span></td></tr><tr><td>21</td><td><span>
+</span></td></tr></tbody></table></code></pre>
+<p>There's a bit more going on here compared to the largely stubbed out <code>client</code>. We're parsing the <code>Cli</code> as before, but this time
+we're also setting up a basic <code>axum</code> router. For now all it does is return a welcome string from it's root path, but we'll add more
+functionality in due course. We've annotated our main function with <code>tokio::main</code> in order to make it <code>async</code> and we're returning
+a <code>color-eyre</code> result.</p>
+<p>You can test this now using <code>cargo run --bin server -- ./example.db 127.0.0.1:2222</code> and if all has gone to plan you should be able
+to curl <code>localhost:2222</code> and see your message. To see the wonderful error messages <code>color-eyre</code> provides you can try to spin up another
+server on the same port.</p>
+<h1 id="conclusion">Conclusion</h1>
+<p>Ooft. That was quite a lot. And we've not even started working with OpenMLS yet!</p>
+<p>In the next exciting episode we will look at implementing our basic user objects and registrations.</p>
+ </section>
+    </body>
+</html>

@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>Sam Cutler's Website</title>
+        <link rel="stylesheet" type="text/css" href="/main.css" />
+    </head>
+
+    <body>
+        <section>
+<h1>Automerge initial impressions</h1>
+<p><time>2025-01-13</time></p>
+<div lang="en-GB"><p>I have for a very long time wanted to take a proper stab at building a little app with Automerge, just so I can get a feel for it.</p>
+<p>After a few false starts I've finally managed to get something working! I don't feel like the complete code is ready to share just yet so this
+post with a couple of snippets will have to suffice for anyone who is interested.</p>
+<h2 id="long-term-vision">Long Term Vision</h2>
+<p>I am interested in building end-to-end encrypted collaboration platforms for journalists. The seed of this idea was first planted by Martin
+Kleppmann when he visited the Guardian's offices many years ago. How we might actually create a tool that is useful for real journalists in the
+real world, has been on mind for several years now and I'm finally starting to take the first steps in building it.
+It's going to be a long project. Security and privacy are paramount, in my day job I work with journalists who find themselves unpopular with
+very sophisticated threat actors. I'll probably write up my thoughts on how local-first is a good fit for investigative journalism at some point,
+for now I just want to jot down my experience using the Automerge Rust library.</p>
+<h2 id="getting-started">Getting started</h2>
+<p>The Automerge team have a very clear focus on providing an excellent experience for folks using the JavaScript libraries which they make very
+clear in the project README. Despite the clear warnings I forged ahead making a Rust TUI which allowed two people to register to a document
+stored on a server and make updates which would syncronize automatically.</p>
+<h2 id="synchronization">Synchronization</h2>
+<p>The Automerge team provide libraries in JavaScript and Rust for creating repos with synchronization as a first-class concept. Unfortunately,
+these libraries don't really prioritise end-to-end encryption which is what I want in the long run. There are currently efforts within
+Ink and Switch to implement the next generation sync protocol, end-to-end encryption and access control primatives.
+Eventually I will probably migrate to use these, but for now I just rolled my own which only took a few hours and was interesting anyway.</p>
+<p>The approach I took was very simple. Each document has a UUID <code>feed_id</code> which each have a series of <code>events</code>. I stuck these in a Postgres
+database via <code>docker compose</code> with the following schema:</p>
+<pre data-lang="sql" style="background-color:#2b303b;color:#c0c5ce;" class="language-sql "><code class="language-sql" data-lang="sql"><span style="color:#b48ead;">CREATE TABLE </span><span style="color:#8fa1b3;">feeds</span><span> (id UUID </span><span style="color:#b48ead;">PRIMARY KEY</span><span>);
+</span><span>
+</span><span style="color:#b48ead;">CREATE TABLE </span><span style="color:#8fa1b3;">events</span><span> (
+</span><span>    feed_id UUID </span><span style="color:#b48ead;">REFERENCES</span><span> feeds (id) NOT </span><span style="color:#d08770;">NULL</span><span>,
+</span><span>    seq_num </span><span style="color:#b48ead;">BIGSERIAL </span><span>NOT </span><span style="color:#d08770;">NULL</span><span>,
+</span><span>    data </span><span style="color:#b48ead;">BYTEA </span><span>NOT </span><span style="color:#d08770;">NULL</span><span>,
+</span><span>    </span><span style="color:#b48ead;">PRIMARY KEY</span><span> (feed_id, seq_num)
+</span><span>);
+</span></code></pre>
+<p>I stuck a basic web server in front of the database using <code>axum</code>, with an endpoint for listing feeds, getting events with a <code>seq_num</code> greater
+than one provided and posting a new event. Getting all new events is as straight forward as making a <code>GET</code> request on the <code>/events</code> path,
+providing the highest <code>seq_num</code> of all the events you've already seen. Easy.</p>
+<p>This approach has no anti-entropy properties so missing events are unfixable as it currently stands, but the point of this exercise
+was to fiddle with Automerge, not build an effective sync system. I'm very interested in Merkle Search Trees, given all the hype around
+BlueSky, but that's a project for another time.</p>
+<h3 id="aside-information-leakage-due-to-shared-sequence-number">Aside: information leakage due to shared sequence number</h3>
+<p>I spent an unreasonable amount of time thinking about the security properties of using a <code>BIGSERIAL</code> rather than a per-feed sequence number.
+If there an adversary has access to a single feed, for example due to a misconfigured set of document permissions, they can post periodic
+events to it in order to measure the amount of events being posted to all other feeds. This is an undesirable property. This lead me down
+a bit of a rabbit hole where I found that having strictly monotonic, per-feed sequence numbers was not super easy with Postgres given concurrent
+writes. I did briefly look into monotonic ULIDs and UUID v7, but felt that it would be better to focus on getting the Automerge stuff working
+before delving deeper into that.</p>
+<h3 id="aside-metrics">Aside: metrics</h3>
+<p>I thought it would be interesting to get a rough idea of how many events I could <code>GET</code> and <code>POST</code> so I hooked up Grafana and Prometheus using
+docker compose and with a bit of help from Claude 3.5 I was able to get some useful graphs within an hour. The actual performance of the sync
+server isn't that interesting, it was more than enough for my prototypes, but I was blow away with how useful LLMs can be when you know what
+you want but are unfamilar with a technology. With a couple of prompts I was able to configure Prometheus and Grafana to come up and with all
+their plumbing in place, and the graphs ready to view even after a <code>docker compose down -v &amp;&amp; docker compose up -d</code>.</p>
+<p>I also have to add how much I <em>love</em> Rust's <code>metrics</code> crate. In my case combined <code>metrics-exporter-prometheus</code> and <code>axum-prometheus</code>, though there
+was a small gotcha that I needed to call the <code>axum_prometheus::metrics::counter!</code> macro instead of just <code>metrics::counter!</code> for my custom metrics
+to appear on my Prometheus end point.</p>
+<h2 id="client">Client</h2>
+<p>To test the sync server I implemented a very basic command line client using <code>clap</code>. One subcommand pushed an immutable and non-collaborative <code>Note</code>
+event up to the server, and the other pulled them down as an ordered list. This worked nicely so I turned my attention onto automerge proper.</p>
+<p>I pretty quickly hit the road block that the Rust library is not extensively documented. The docs.rs entry for the library contained enough info
+for me to get started and from there I guessed my way around the API using <code>rust-analyzer</code>. I eventually ended up getting stuck on understanding
+the difference between a <code>Patch</code> and a <code>Change</code> before randomly finding the (binary format specification)[https://automerge.org/automerge-binary-format-spec/]
+which helped me understand some of the lingo.</p>
+<p>In the end to get a full understanding I went to the Automerge community discord where the maintainer <code>pvh</code> helpfully explained:</p>
+<blockquote>
+<p>You could think of a "change" as a "transaction", whereas a patch moves a materialized state between two points. Imagine setting a value like
+this: state 0:  "foo", state 1: "bar", state 2: "foo". This is two changes, but a diff between state 0 and state 2 would be empty.</p>
+</blockquote>
+<p>A great clarification!</p>
+<p>After a few hours of toing and froing I eventually landed on the <code>Document</code> type based on the <code>automerge::AutoCommit</code> type. I then wrapped this in a
+very basic <code>LineEditor</code> type and a <code>ratatui</code> interface.</p>
+<p>Wworking with <code>AutoCommit</code> came down to a few basic flows: creating a new document, loading an existing document, updating the local working copy
+and pushing/pulling changes to my sync manager.</p>
+<p>For a new document:</p>
+<ul>
+<li>Create feed with random ID</li>
+<li>Create <code>AutoCommit</code> document</li>
+<li>Add hard-coded top level text prop.</li>
+<li>Save document into feed as bytes using <code>AutoCommit::save(&amp;self)</code></li>
+<li>Update the document diff cursor using <code>AutoCommit::update_diff_cursor(&amp;mut self)</code></li>
+<li>Go to event loop</li>
+</ul>
+<p>Note that the document diff cursor is different to what I will refer to as the character cursor. The diff cursor is a cursor
+over the changes in our Automerge document. The character or UI cursor is the position we insert new characters and render in our UI.</p>
+<p>When loading an existing document:</p>
+<ul>
+<li>Fetch all the events for the provided <code>feed_id</code></li>
+<li>Get the <code>AutomergeDoc</code> event (should be the first one)</li>
+<li>Load it with <code>AutoCommit::load(&amp;bytes)</code></li>
+<li>Get any events and merge them in with <code>AutoCommit::apply_changes(&amp;self, &amp;changes)</code></li>
+<li>Do bookkeeping for UI cursor and rendered text so that we can show it in our TUI</li>
+<li>Go to event loop</li>
+</ul>
+<p>Inside the event loop we detect key strokes then apply the appropriate function to <code>splice_text</code>, update our UI cursor to the right
+character offset (<em>not</em> byte offset, remember Rust strings are UTF-8) and render out a new <code>String</code> for our TUI to display.</p>
+<p>Periodically the sync manager will need to get all the modifications to the document since the last iteration. To do this we do the following:</p>
+<ul>
+<li>Get the current diff cursor.</li>
+<li>Get all the changes since the cursor was last updated with <code>AutoCommit::get_changes(&amp;cursor)</code></li>
+<li>Put these in our outbound queue, encoded as bytes using <code>Change::raw_bytes(&amp;self)</code></li>
+<li>Update the diff cursor so we don't resend events that are already sent.</li>
+</ul>
+<p>Additionally, the sync manager pull changes down from other clients like so:</p>
+<ul>
+<li>Pull all events from the document's feed since the last update</li>
+<li>Filter to <code>AutomergeChange</code> events</li>
+<li>Apply changes with <code>AutoCommit::apply_changes(&amp;self, &amp;changes)</code></li>
+<li>Update the rendered version of our document</li>
+</ul>
+<h2 id="all-done">All done!</h2>
+<p>Here's a video of it all working against a local server.</p>
+<div>
+    <iframe
+        class="video"
+        src="https://www.youtube.com/embed/mhn4bEIExg0"
+        webkitallowfullscreen
+        mozallowfullscreen
+        allowfullscreen
+    >
+    </iframe>
+</div>
+<p>In the end I was quite pleased with it. After being too put off (lazy?) to work with limited documentation in the past, getting this to work took maybe
+a few hours in the end, and hopefully helped with my code spelunking skills?</p>
+<p>Hopefully someone (or some language model) has found this useful or interesting. Until next time.</p>
+<h2 id="code">Code</h2>
+<p>The code for the project is a bit of a mess right now but I think the <code>Document</code> type is fine to share. If you would like to discuss
+I've mentioned then feel free to reach out to me on BlueSky with the handle <code>@itsibitzi.dev</code>.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">use </span><span>automerge::{transaction::Transactable, AutoCommit, AutomergeError, ObjId, ObjType, ReadDoc};
+</span><span style="color:#b48ead;">use </span><span>common::event::EventData;
+</span><span style="color:#b48ead;">use </span><span>snafu::{OptionExt as _, ResultExt as _};
+</span><span style="color:#b48ead;">use </span><span>uuid::Uuid;
+</span><span>
+</span><span style="color:#b48ead;">use crate</span><span>::{
+</span><span>    error::{
+</span><span>        AutomergeSnafu, AutomergeValueNotFoundSnafu, ClientError, FeedNotFoundSnafu, SyncSnafu,
+</span><span>    },
+</span><span>    sync_manager::SyncManager,
+</span><span>};
+</span><span>
+</span><span style="color:#b48ead;">pub struct </span><span>Document {
+</span><span>    </span><span style="color:#bf616a;">feed_id</span><span>: Uuid,
+</span><span>    </span><span style="color:#bf616a;">cursor</span><span>: </span><span style="color:#b48ead;">usize</span><span>,
+</span><span>    </span><span style="color:#bf616a;">total_chars</span><span>: </span><span style="color:#b48ead;">usize</span><span>,
+</span><span>    </span><span style="color:#bf616a;">inner</span><span>: AutoCommit,
+</span><span>    </span><span style="color:#bf616a;">rendered</span><span>: String,
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl </span><span>Document {
+</span><span>    </span><span style="color:#b48ead;">const </span><span style="color:#d08770;">TEXT_PROP</span><span>: &amp;</span><span style="color:#b48ead;">&#39;static str </span><span>= &quot;</span><span style="color:#a3be8c;">txt</span><span>&quot;;
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">pub</span><span> async </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">new</span><span>(
+</span><span>        </span><span style="color:#bf616a;">feed_id</span><span>: Option&lt;Uuid&gt;,
+</span><span>        </span><span style="color:#bf616a;">sync_manager</span><span>: &amp;SyncManager,
+</span><span>    ) -&gt; Result&lt;</span><span style="color:#b48ead;">Self</span><span>, ClientError&gt; {
+</span><span>        </span><span style="color:#b48ead;">if let </span><span>Some(feed_id) = feed_id {
+</span><span>            sync_manager.</span><span style="color:#96b5b4;">register_doc</span><span>(feed_id).await;
+</span><span>
+</span><span>            sync_manager.</span><span style="color:#96b5b4;">pull</span><span>().await.</span><span style="color:#96b5b4;">context</span><span>(SyncSnafu)?;
+</span><span>
+</span><span>            </span><span style="color:#b48ead;">if let </span><span>Some(events) = sync_manager.</span><span style="color:#96b5b4;">get_feed_events</span><span>(feed_id).await {
+</span><span>                </span><span style="color:#b48ead;">let</span><span> maybe_doc = events.</span><span style="color:#96b5b4;">iter</span><span>().</span><span style="color:#96b5b4;">find_map</span><span>(|</span><span style="color:#bf616a;">e</span><span>| </span><span style="color:#b48ead;">match </span><span>&amp;e.data {
+</span><span>                    EventData::AutomergeDoc { doc } =&gt; {
+</span><span>                        Some(AutoCommit::load(doc).</span><span style="color:#96b5b4;">context</span><span>(AutomergeSnafu))
+</span><span>                    }
+</span><span>                    _ =&gt; None,
+</span><span>                });
+</span><span>
+</span><span>                </span><span style="color:#b48ead;">let</span><span> changes = events
+</span><span>                    .</span><span style="color:#96b5b4;">into_iter</span><span>()
+</span><span>                    .</span><span style="color:#96b5b4;">filter_map</span><span>(|</span><span style="color:#bf616a;">e</span><span>| e.</span><span style="color:#96b5b4;">into_automerge_change</span><span>())
+</span><span>                    .</span><span style="color:#96b5b4;">flatten</span><span>();
+</span><span>
+</span><span>                </span><span style="color:#b48ead;">if let </span><span>Some(doc) = maybe_doc {
+</span><span>                    </span><span style="color:#b48ead;">let mut</span><span> inner = doc?;
+</span><span>
+</span><span>                    sync_manager
+</span><span>                        .</span><span style="color:#96b5b4;">enqueue_automerge_doc</span><span>(feed_id, &amp;</span><span style="color:#b48ead;">mut</span><span> inner)
+</span><span>                        .await;
+</span><span>
+</span><span>                    inner.</span><span style="color:#96b5b4;">apply_changes</span><span>(changes).</span><span style="color:#96b5b4;">context</span><span>(AutomergeSnafu)?;
+</span><span>
+</span><span>                    inner.</span><span style="color:#96b5b4;">update_diff_cursor</span><span>();
+</span><span>
+</span><span>                    </span><span style="color:#b48ead;">let</span><span> obj_id = </span><span style="color:#b48ead;">Self</span><span>::doc_text_obj_id(&amp;inner)?;
+</span><span>
+</span><span>                    </span><span style="color:#b48ead;">let</span><span> rendered = inner.</span><span style="color:#96b5b4;">text</span><span>(obj_id).</span><span style="color:#96b5b4;">context</span><span>(AutomergeSnafu)?;
+</span><span>                    </span><span style="color:#b48ead;">let</span><span> total_chars = rendered.</span><span style="color:#96b5b4;">chars</span><span>().</span><span style="color:#96b5b4;">count</span><span>();
+</span><span>
+</span><span>                    Ok(</span><span style="color:#b48ead;">Self </span><span>{
+</span><span>                        feed_id,
+</span><span>                        total_chars,
+</span><span>                        cursor: </span><span style="color:#d08770;">0</span><span>,
+</span><span>                        inner,
+</span><span>                        rendered,
+</span><span>                    })
+</span><span>                } </span><span style="color:#b48ead;">else </span><span>{
+</span><span>                    </span><span style="color:#65737e;">// TODO: handle gracefully
+</span><span>                    panic!(&quot;</span><span style="color:#a3be8c;">Fix me, doc not found in feed</span><span>&quot;);
+</span><span>                }
+</span><span>            } </span><span style="color:#b48ead;">else </span><span>{
+</span><span>                </span><span style="color:#65737e;">// TODO: handle gracefully
+</span><span>                panic!(&quot;</span><span style="color:#a3be8c;">Feed not found in sync manager</span><span>&quot;);
+</span><span>            }
+</span><span>        } </span><span style="color:#b48ead;">else </span><span>{
+</span><span>            </span><span style="color:#b48ead;">let</span><span> feed_id = Uuid::new_v4();
+</span><span>            sync_manager.</span><span style="color:#96b5b4;">register_doc</span><span>(feed_id).await;
+</span><span>
+</span><span>            </span><span style="color:#b48ead;">let mut</span><span> inner = AutoCommit::new();
+</span><span>            inner
+</span><span>                .</span><span style="color:#96b5b4;">put_object</span><span>(automerge::</span><span style="color:#d08770;">ROOT</span><span>, </span><span style="color:#b48ead;">Self</span><span>::</span><span style="color:#d08770;">TEXT_PROP</span><span>, ObjType::Text)
+</span><span>                .</span><span style="color:#96b5b4;">context</span><span>(AutomergeSnafu)?;
+</span><span>
+</span><span>            sync_manager
+</span><span>                .</span><span style="color:#96b5b4;">enqueue_automerge_doc</span><span>(feed_id, &amp;</span><span style="color:#b48ead;">mut</span><span> inner)
+</span><span>                .await;
+</span><span>
+</span><span>            inner.</span><span style="color:#96b5b4;">update_diff_cursor</span><span>();
+</span><span>
+</span><span>            Ok(</span><span style="color:#b48ead;">Self </span><span>{
+</span><span>                feed_id,
+</span><span>                total_chars: </span><span style="color:#d08770;">0</span><span>,
+</span><span>                cursor: </span><span style="color:#d08770;">0</span><span>,
+</span><span>                inner,
+</span><span>                rendered: String::new(),
+</span><span>            })
+</span><span>        }
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">cursor</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>) -&gt; </span><span style="color:#b48ead;">usize </span><span>{
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.cursor
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">cursor_back</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>) {
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.cursor = </span><span style="color:#bf616a;">self</span><span>.cursor.</span><span style="color:#96b5b4;">saturating_sub</span><span>(</span><span style="color:#d08770;">1</span><span>)
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">cursor_forward</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>) {
+</span><span>        </span><span style="color:#b48ead;">if </span><span style="color:#bf616a;">self</span><span>.</span><span style="color:#96b5b4;">cursor</span><span>() &lt; </span><span style="color:#bf616a;">self</span><span>.total_chars {
+</span><span>            </span><span style="color:#bf616a;">self</span><span>.cursor = </span><span style="color:#bf616a;">self</span><span>.cursor.</span><span style="color:#96b5b4;">saturating_add</span><span>(</span><span style="color:#d08770;">1</span><span>)
+</span><span>        }
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">cursor_home</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>) {
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.cursor = </span><span style="color:#d08770;">0</span><span>;
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">cursor_end</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>) {
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.cursor = </span><span style="color:#bf616a;">self</span><span>.total_chars;
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">doc_text_obj_id</span><span>(</span><span style="color:#bf616a;">doc</span><span>: &amp;AutoCommit) -&gt; Result&lt;ObjId, ClientError&gt; {
+</span><span>        </span><span style="color:#b48ead;">let </span><span>(_, obj_id) = doc
+</span><span>            .</span><span style="color:#96b5b4;">get</span><span>(automerge::</span><span style="color:#d08770;">ROOT</span><span>, </span><span style="color:#b48ead;">Self</span><span>::</span><span style="color:#d08770;">TEXT_PROP</span><span>)
+</span><span>            .</span><span style="color:#96b5b4;">context</span><span>(AutomergeSnafu)?
+</span><span>            .</span><span style="color:#96b5b4;">context</span><span>(AutomergeValueNotFoundSnafu {
+</span><span>                obj_id: automerge::</span><span style="color:#d08770;">ROOT</span><span>,
+</span><span>                prop: </span><span style="color:#b48ead;">Self</span><span>::</span><span style="color:#d08770;">TEXT_PROP</span><span>,
+</span><span>            })?;
+</span><span>
+</span><span>        Ok(obj_id)
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">backspace</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>) -&gt; Result&lt;(), ClientError&gt; {
+</span><span>        </span><span style="color:#b48ead;">let</span><span> obj_id = </span><span style="color:#b48ead;">Self</span><span>::doc_text_obj_id(&amp;</span><span style="color:#bf616a;">self</span><span>.inner)?;
+</span><span>
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.inner
+</span><span>            .</span><span style="color:#96b5b4;">splice_text</span><span>(obj_id, </span><span style="color:#bf616a;">self</span><span>.cursor, -</span><span style="color:#d08770;">1</span><span>, &quot;&quot;)
+</span><span>            .</span><span style="color:#96b5b4;">context</span><span>(AutomergeSnafu)?;
+</span><span>
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.</span><span style="color:#96b5b4;">cursor_back</span><span>();
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.</span><span style="color:#96b5b4;">update_rendered</span><span>()?;
+</span><span>
+</span><span>        Ok(())
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">delete</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>) -&gt; Result&lt;(), ClientError&gt; {
+</span><span>        </span><span style="color:#b48ead;">let</span><span> obj_id = </span><span style="color:#b48ead;">Self</span><span>::doc_text_obj_id(&amp;</span><span style="color:#bf616a;">self</span><span>.inner)?;
+</span><span>
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.inner
+</span><span>            .</span><span style="color:#96b5b4;">splice_text</span><span>(obj_id, </span><span style="color:#bf616a;">self</span><span>.cursor, </span><span style="color:#d08770;">1</span><span>, &quot;&quot;)
+</span><span>            .</span><span style="color:#96b5b4;">context</span><span>(AutomergeSnafu)?;
+</span><span>
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.</span><span style="color:#96b5b4;">update_rendered</span><span>()?;
+</span><span>
+</span><span>        Ok(())
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">update_rendered</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>) -&gt; Result&lt;(), ClientError&gt; {
+</span><span>        </span><span style="color:#b48ead;">let</span><span> obj_id = </span><span style="color:#b48ead;">Self</span><span>::doc_text_obj_id(&amp;</span><span style="color:#bf616a;">self</span><span>.inner)?;
+</span><span>
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.rendered = </span><span style="color:#bf616a;">self</span><span>.inner.</span><span style="color:#96b5b4;">text</span><span>(obj_id).</span><span style="color:#96b5b4;">context</span><span>(AutomergeSnafu)?;
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.total_chars = </span><span style="color:#bf616a;">self</span><span>.rendered.</span><span style="color:#96b5b4;">chars</span><span>().</span><span style="color:#96b5b4;">count</span><span>();
+</span><span>
+</span><span>        Ok(())
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">write_char</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>, </span><span style="color:#bf616a;">s</span><span>: </span><span style="color:#b48ead;">char</span><span>) -&gt; Result&lt;(), ClientError&gt; {
+</span><span>        </span><span style="color:#b48ead;">let</span><span> obj_id = </span><span style="color:#b48ead;">Self</span><span>::doc_text_obj_id(&amp;</span><span style="color:#bf616a;">self</span><span>.inner)?;
+</span><span>
+</span><span>        </span><span style="color:#b48ead;">let mut</span><span> str_buf = [</span><span style="color:#d08770;">0_</span><span style="color:#b48ead;">u8</span><span>; </span><span style="color:#d08770;">4</span><span>];
+</span><span>        </span><span style="color:#b48ead;">let</span><span> s = s.</span><span style="color:#96b5b4;">encode_utf8</span><span>(&amp;</span><span style="color:#b48ead;">mut</span><span> str_buf);
+</span><span>
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.inner
+</span><span>            .</span><span style="color:#96b5b4;">splice_text</span><span>(obj_id, </span><span style="color:#bf616a;">self</span><span>.cursor, </span><span style="color:#d08770;">0</span><span>, s)
+</span><span>            .</span><span style="color:#96b5b4;">context</span><span>(AutomergeSnafu)?;
+</span><span>
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.</span><span style="color:#96b5b4;">update_rendered</span><span>()?;
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.</span><span style="color:#96b5b4;">cursor_forward</span><span>();
+</span><span>
+</span><span>        Ok(())
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">pub</span><span> async </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">enqueue_changes_to_sync_manager</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>, </span><span style="color:#bf616a;">sync_manager</span><span>: &amp;SyncManager) {
+</span><span>        </span><span style="color:#b48ead;">let</span><span> cursor = </span><span style="color:#bf616a;">self</span><span>.inner.</span><span style="color:#96b5b4;">diff_cursor</span><span>();
+</span><span>
+</span><span>        </span><span style="color:#b48ead;">let</span><span> changes = </span><span style="color:#bf616a;">self</span><span>.inner.</span><span style="color:#96b5b4;">get_changes</span><span>(&amp;cursor);
+</span><span>
+</span><span>        tracing::debug!(&quot;</span><span style="color:#a3be8c;">Enqueueing {} changes</span><span>&quot;, changes.</span><span style="color:#96b5b4;">len</span><span>());
+</span><span>
+</span><span>        </span><span style="color:#b48ead;">for</span><span> change in changes {
+</span><span>            sync_manager
+</span><span>                .</span><span style="color:#96b5b4;">enqueue_automerge_change</span><span>(</span><span style="color:#bf616a;">self</span><span>.feed_id, change)
+</span><span>                .await;
+</span><span>        }
+</span><span>
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.inner.</span><span style="color:#96b5b4;">update_diff_cursor</span><span>();
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">pub</span><span> async </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">merge_changes_from_sync_manager</span><span>(
+</span><span>        &amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>,
+</span><span>        </span><span style="color:#bf616a;">sync_manager</span><span>: &amp;SyncManager,
+</span><span>    ) -&gt; Result&lt;(), ClientError&gt; {
+</span><span>        </span><span style="color:#b48ead;">let</span><span> changes = sync_manager
+</span><span>            .</span><span style="color:#96b5b4;">get_feed_events</span><span>(</span><span style="color:#bf616a;">self</span><span>.feed_id)
+</span><span>            .await
+</span><span>            .</span><span style="color:#96b5b4;">context</span><span>(FeedNotFoundSnafu {
+</span><span>                feed_id: </span><span style="color:#bf616a;">self</span><span>.feed_id,
+</span><span>            })?
+</span><span>            .</span><span style="color:#96b5b4;">into_iter</span><span>()
+</span><span>            .</span><span style="color:#96b5b4;">flat_map</span><span>(|</span><span style="color:#bf616a;">event</span><span>| event.</span><span style="color:#96b5b4;">into_automerge_change</span><span>())
+</span><span>            .collect::&lt;Result&lt;Vec&lt;_&gt;, AutomergeError&gt;&gt;()
+</span><span>            .</span><span style="color:#96b5b4;">context</span><span>(AutomergeSnafu)?; </span><span style="color:#65737e;">// todo delete
+</span><span>
+</span><span>        tracing::debug!(&quot;</span><span style="color:#a3be8c;">Got {} changes</span><span>&quot;, changes.</span><span style="color:#96b5b4;">len</span><span>());
+</span><span>
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.inner.</span><span style="color:#96b5b4;">apply_changes</span><span>(changes).</span><span style="color:#96b5b4;">context</span><span>(AutomergeSnafu)?;
+</span><span>
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.</span><span style="color:#96b5b4;">update_rendered</span><span>()?;
+</span><span>
+</span><span>        Ok(())
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">feed_id</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>) -&gt; Uuid {
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.feed_id
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">rendered</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>) -&gt; &amp;</span><span style="color:#b48ead;">str </span><span>{
+</span><span>        &amp;</span><span style="color:#bf616a;">self</span><span>.rendered
+</span><span>    }
+</span><span>}
+</span></code></pre>
+ </section>
+    </body>
+</html>

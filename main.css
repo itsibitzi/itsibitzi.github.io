@@ -1,0 +1,95 @@
+/**/
+/* My things */
+/**/
+
+@font-face {
+    font-family: "AtkinsonHyperlegible";
+    src: url("/fonts/AtkinsonHyperlegible-Regular.ttf") format("truetype");
+    font-weight: normal;
+}
+@font-face {
+    font-family: "AtkinsonHyperlegible";
+    src: url("/fonts/AtkinsonHyperlegible-Bold.ttf") format("truetype");
+    font-weight: bold;
+}
+@font-face {
+    font-family: "AtkinsonHyperlegible";
+    src: url("/fonts/AtkinsonHyperlegible-BoldItalic.ttf") format("truetype");
+    font-weight: bold;
+    font-style: italic;
+}
+@font-face {
+    font-family: "AtkinsonHyperlegible";
+    src: url("/fonts/AtkinsonHyperlegible-Italic.ttf") format("truetype");
+    font-weight: normal;
+    font-style: italic;
+}
+
+body {
+    font-family: "AtkinsonHyperlegible", system-ui, sans-serif;
+    background: rgb(199, 246, 199);
+}
+
+h1 {
+    font-size: 1.7em;
+}
+
+section {
+    margin-left: 4em;
+    max-width: 60em;
+    margin-right: 4em;
+}
+
+blockquote {
+    background: burlywood;
+}
+
+blockquote::before {
+    content: "“";
+    position: absolute;
+    display: block;
+    margin-left: -0.5rem;
+    line-height: 1.5rem;
+    font-size: 3rem;
+}
+
+blockquote > p {
+    padding: 0.5rem;
+}
+
+.video {
+    margin-left: 10%;
+    width: 80%;
+    aspect-ratio: 16 / 9;
+}
+/**/
+/* Code stuff copied from zola website */
+/**/
+
+pre {
+    padding: 1rem;
+    overflow: auto;
+}
+
+/* The line numbers already provide some kind of left/right padding */
+pre[data-linenos] {
+    padding: 1rem 0;
+}
+pre table td {
+    padding: 0;
+}
+/* The line number cells */
+pre table td:nth-of-type(1) {
+    text-align: center;
+    user-select: none;
+}
+pre mark {
+    /* If you want your highlights to take the full width */
+    display: block;
+    /* The default background colour of a mark is bright yellow */
+    background-color: rgba(254, 252, 232, 0.9);
+}
+pre table {
+    width: 100%;
+    border-collapse: collapse;
+}
