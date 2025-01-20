@@ -1,7 +1,11 @@
 +++
 title = "Automerge initial impressions"
 date = 2025-01-13
+[taxonomies]
+tags = ["rust", "local-first", "automerge", "stream-of-consciousness"]
 +++
+
+## Introduction
 
 I have for a very long time wanted to take a proper stab at building a little app with Automerge, just so I can get a feel for it.
 
