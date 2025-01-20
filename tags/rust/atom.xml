@@ -1,0 +1,386 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title> - rust</title>
+    <link rel="self" type="application/atom+xml" href="https://itsibitzi.dev/tags/rust/atom.xml"/>
+    <link rel="alternate" type="text/html" href="https://itsibitzi.dev"/>
+    <generator uri="https://www.getzola.org/">Zola</generator>
+    <updated>2025-01-13T00:00:00+00:00</updated>
+    <id>https://itsibitzi.dev/tags/rust/atom.xml</id>
+    <entry xml:lang="en">
+        <title>Automerge initial impressions</title>
+        <published>2025-01-13T00:00:00+00:00</published>
+        <updated>2025-01-13T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              Unknown
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://itsibitzi.dev/posts/automerge-initial-impressions/"/>
+        <id>https://itsibitzi.dev/posts/automerge-initial-impressions/</id>
+        
+        <content type="html" xml:base="https://itsibitzi.dev/posts/automerge-initial-impressions/">&lt;h2 id=&quot;introduction&quot;&gt;Introduction&lt;a class=&quot;zola-anchor&quot; href=&quot;#introduction&quot; aria-label=&quot;Anchor link for: introduction&quot;&gt;🔗&lt;&#x2F;a&gt;&lt;&#x2F;h2&gt;
+&lt;p&gt;I have for a very long time wanted to take a proper stab at building a little app with Automerge, just so I can get a feel for it.&lt;&#x2F;p&gt;
+&lt;p&gt;After a few false starts I&#x27;ve finally managed to get something working! I don&#x27;t feel like the complete code is ready to share just yet so this
+post with a couple of snippets will have to suffice for anyone who is interested.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;long-term-vision&quot;&gt;Long Term Vision&lt;a class=&quot;zola-anchor&quot; href=&quot;#long-term-vision&quot; aria-label=&quot;Anchor link for: long-term-vision&quot;&gt;🔗&lt;&#x2F;a&gt;&lt;&#x2F;h2&gt;
+&lt;p&gt;I am interested in building end-to-end encrypted collaboration platforms for journalists. The seed of this idea was first planted by Martin
+Kleppmann when he visited the Guardian&#x27;s offices many years ago. How we might actually create a tool that is useful for real journalists in the
+real world, has been on mind for several years now and I&#x27;m finally starting to take the first steps in building it.
+It&#x27;s going to be a long project. Security and privacy are paramount, in my day job I work with journalists who find themselves unpopular with
+very sophisticated threat actors. I&#x27;ll probably write up my thoughts on how local-first is a good fit for investigative journalism at some point,
+for now I just want to jot down my experience using the Automerge Rust library.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;getting-started&quot;&gt;Getting started&lt;a class=&quot;zola-anchor&quot; href=&quot;#getting-started&quot; aria-label=&quot;Anchor link for: getting-started&quot;&gt;🔗&lt;&#x2F;a&gt;&lt;&#x2F;h2&gt;
+&lt;p&gt;The Automerge team have a very clear focus on providing an excellent experience for folks using the JavaScript libraries which they make very
+clear in the project README. Despite the clear warnings I forged ahead making a Rust TUI which allowed two people to register to a document
+stored on a server and make updates which would synchronize automatically.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;synchronization&quot;&gt;Synchronization&lt;a class=&quot;zola-anchor&quot; href=&quot;#synchronization&quot; aria-label=&quot;Anchor link for: synchronization&quot;&gt;🔗&lt;&#x2F;a&gt;&lt;&#x2F;h2&gt;
+&lt;p&gt;The Automerge team provide libraries in JavaScript and Rust for creating repos with synchronization as a first-class concept. Unfortunately,
+these libraries don&#x27;t really prioritize end-to-end encryption which is what I want in the long run. There are currently efforts within
+Ink and Switch to implement the next generation sync protocol, end-to-end encryption and access control primitives.
+Eventually I will probably migrate to use these, but for now I just rolled my own which only took a few hours and was interesting anyway.&lt;&#x2F;p&gt;
+&lt;p&gt;The approach I took was very simple. Each document has a UUID &lt;code&gt;feed_id&lt;&#x2F;code&gt; which each have a series of &lt;code&gt;events&lt;&#x2F;code&gt;. I stuck these in a Postgres
+database via &lt;code&gt;docker compose&lt;&#x2F;code&gt; with the following schema:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;sql&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-sql &quot;&gt;&lt;code class=&quot;language-sql&quot; data-lang=&quot;sql&quot;&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;CREATE TABLE &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;feeds&lt;&#x2F;span&gt;&lt;span&gt; (id UUID &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;PRIMARY KEY&lt;&#x2F;span&gt;&lt;span&gt;);
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;CREATE TABLE &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;events&lt;&#x2F;span&gt;&lt;span&gt; (
+&lt;&#x2F;span&gt;&lt;span&gt;    feed_id UUID &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;REFERENCES&lt;&#x2F;span&gt;&lt;span&gt; feeds (id) NOT &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;NULL&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    seq_num &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;BIGSERIAL &lt;&#x2F;span&gt;&lt;span&gt;NOT &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;NULL&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    data &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;BYTEA &lt;&#x2F;span&gt;&lt;span&gt;NOT &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;NULL&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;PRIMARY KEY&lt;&#x2F;span&gt;&lt;span&gt; (feed_id, seq_num)
+&lt;&#x2F;span&gt;&lt;span&gt;);
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;I stuck a basic web server in front of the database using &lt;code&gt;axum&lt;&#x2F;code&gt;, with an endpoint for listing feeds, getting events with a &lt;code&gt;seq_num&lt;&#x2F;code&gt; greater
+than one provided and posting a new event. Getting all new events is as straight forward as making a &lt;code&gt;GET&lt;&#x2F;code&gt; request on the &lt;code&gt;&#x2F;events&lt;&#x2F;code&gt; path,
+providing the highest &lt;code&gt;seq_num&lt;&#x2F;code&gt; of all the events you&#x27;ve already seen. Easy.&lt;&#x2F;p&gt;
+&lt;p&gt;This approach has no anti-entropy properties so missing events are unfixable as it currently stands, but the point of this exercise
+was to fiddle with Automerge, not build an effective sync system. I&#x27;m very interested in Merkle Search Trees, given all the hype around
+BlueSky, but that&#x27;s a project for another time.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;aside-information-leakage-due-to-shared-sequence-number&quot;&gt;Aside: information leakage due to shared sequence number&lt;a class=&quot;zola-anchor&quot; href=&quot;#aside-information-leakage-due-to-shared-sequence-number&quot; aria-label=&quot;Anchor link for: aside-information-leakage-due-to-shared-sequence-number&quot;&gt;🔗&lt;&#x2F;a&gt;&lt;&#x2F;h3&gt;
+&lt;p&gt;I spent an unreasonable amount of time thinking about the security properties of using a &lt;code&gt;BIGSERIAL&lt;&#x2F;code&gt; rather than a per-feed sequence number.
+If there an adversary has access to a single feed, for example due to a misconfigured set of document permissions, they can post periodic
+events to it in order to measure the amount of events being posted to all other feeds. This is an undesirable property. This lead me down
+a bit of a rabbit hole where I found that having strictly monotonic, per-feed sequence numbers was not super easy with Postgres given concurrent
+writes. I did briefly look into monotonic ULIDs and UUID v7, but felt that it would be better to focus on getting the Automerge stuff working
+before delving deeper into that.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;aside-metrics&quot;&gt;Aside: metrics&lt;a class=&quot;zola-anchor&quot; href=&quot;#aside-metrics&quot; aria-label=&quot;Anchor link for: aside-metrics&quot;&gt;🔗&lt;&#x2F;a&gt;&lt;&#x2F;h3&gt;
+&lt;p&gt;I thought it would be interesting to get a rough idea of how many events I could &lt;code&gt;GET&lt;&#x2F;code&gt; and &lt;code&gt;POST&lt;&#x2F;code&gt; so I hooked up Grafana and Prometheus using
+docker compose and with a bit of help from Claude 3.5 I was able to get some useful graphs within an hour. The actual performance of the sync
+server isn&#x27;t that interesting, it was more than enough for my prototypes, but I was blow away with how useful LLMs can be when you know what
+you want but are unfamiliar with a technology. With a couple of prompts I was able to configure Prometheus and Grafana to come up and with all
+their plumbing in place, and the graphs ready to view even after a &lt;code&gt;docker compose down -v &amp;amp;&amp;amp; docker compose up -d&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;I also have to add how much I &lt;em&gt;love&lt;&#x2F;em&gt; Rust&#x27;s &lt;code&gt;metrics&lt;&#x2F;code&gt; crate. In my case combined &lt;code&gt;metrics-exporter-prometheus&lt;&#x2F;code&gt; and &lt;code&gt;axum-prometheus&lt;&#x2F;code&gt;, though there
+was a small gotcha that I needed to call the &lt;code&gt;axum_prometheus::metrics::counter!&lt;&#x2F;code&gt; macro instead of just &lt;code&gt;metrics::counter!&lt;&#x2F;code&gt; for my custom metrics
+to appear on my Prometheus end point.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;client&quot;&gt;Client&lt;a class=&quot;zola-anchor&quot; href=&quot;#client&quot; aria-label=&quot;Anchor link for: client&quot;&gt;🔗&lt;&#x2F;a&gt;&lt;&#x2F;h2&gt;
+&lt;p&gt;To test the sync server I implemented a very basic command line client using &lt;code&gt;clap&lt;&#x2F;code&gt;. One subcommand pushed an immutable and non-collaborative &lt;code&gt;Note&lt;&#x2F;code&gt;
+event up to the server, and the other pulled them down as an ordered list. This worked nicely so I turned my attention onto automerge proper.&lt;&#x2F;p&gt;
+&lt;p&gt;I pretty quickly hit the road block that the Rust library is not extensively documented. The docs.rs entry for the library contained enough info
+for me to get started and from there I guessed my way around the API using &lt;code&gt;rust-analyzer&lt;&#x2F;code&gt;. I eventually ended up getting stuck on understanding
+the difference between a &lt;code&gt;Patch&lt;&#x2F;code&gt; and a &lt;code&gt;Change&lt;&#x2F;code&gt; before randomly finding the (binary format specification)[https:&#x2F;&#x2F;automerge.org&#x2F;automerge-binary-format-spec&#x2F;]
+which helped me understand some of the lingo.&lt;&#x2F;p&gt;
+&lt;p&gt;In the end to get a full understanding I went to the Automerge community discord where the maintainer &lt;code&gt;pvh&lt;&#x2F;code&gt; helpfully explained:&lt;&#x2F;p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;You could think of a &quot;change&quot; as a &quot;transaction&quot;, whereas a patch moves a materialized state between two points. Imagine setting a value like
+this: state 0: &quot;foo&quot;, state 1: &quot;bar&quot;, state 2: &quot;foo&quot;. This is two changes, but a diff between state 0 and state 2 would be empty.&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;p&gt;A great clarification!&lt;&#x2F;p&gt;
+&lt;p&gt;After a few hours of toing and froing I eventually landed on the &lt;code&gt;Document&lt;&#x2F;code&gt; type based on the &lt;code&gt;automerge::AutoCommit&lt;&#x2F;code&gt; type. I then wrapped this in a
+very basic &lt;code&gt;LineEditor&lt;&#x2F;code&gt; type and a &lt;code&gt;ratatui&lt;&#x2F;code&gt; interface.&lt;&#x2F;p&gt;
+&lt;p&gt;Working with &lt;code&gt;AutoCommit&lt;&#x2F;code&gt; came down to a few basic flows: creating a new document, loading an existing document, updating the local working copy
+and pushing&#x2F;pulling changes to my sync manager.&lt;&#x2F;p&gt;
+&lt;p&gt;For a new document:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Create feed with random ID&lt;&#x2F;li&gt;
+&lt;li&gt;Create &lt;code&gt;AutoCommit&lt;&#x2F;code&gt; document&lt;&#x2F;li&gt;
+&lt;li&gt;Add hard-coded top level text prop.&lt;&#x2F;li&gt;
+&lt;li&gt;Save document into feed as bytes using &lt;code&gt;AutoCommit::save(&amp;amp;self)&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;Update the document diff cursor using &lt;code&gt;AutoCommit::update_diff_cursor(&amp;amp;mut self)&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;Go to event loop&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;Note that the document diff cursor is different to what I will refer to as the character cursor. The diff cursor is a cursor
+over the changes in our Automerge document. The character or UI cursor is the position we insert new characters and render in our UI.&lt;&#x2F;p&gt;
+&lt;p&gt;When loading an existing document:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Fetch all the events for the provided &lt;code&gt;feed_id&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;Get the &lt;code&gt;AutomergeDoc&lt;&#x2F;code&gt; event (should be the first one)&lt;&#x2F;li&gt;
+&lt;li&gt;Load it with &lt;code&gt;AutoCommit::load(&amp;amp;bytes)&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;Get any events and merge them in with &lt;code&gt;AutoCommit::apply_changes(&amp;amp;self, &amp;amp;changes)&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;Do bookkeeping for UI cursor and rendered text so that we can show it in our TUI&lt;&#x2F;li&gt;
+&lt;li&gt;Go to event loop&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;Inside the event loop we detect key strokes then apply the appropriate function to &lt;code&gt;splice_text&lt;&#x2F;code&gt;, update our UI cursor to the right
+character offset (&lt;em&gt;not&lt;&#x2F;em&gt; byte offset, remember Rust strings are UTF-8) and render out a new &lt;code&gt;String&lt;&#x2F;code&gt; for our TUI to display.&lt;&#x2F;p&gt;
+&lt;p&gt;Periodically the sync manager will need to get all the modifications to the document since the last iteration. To do this we do the following:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Get the current diff cursor.&lt;&#x2F;li&gt;
+&lt;li&gt;Get all the changes since the cursor was last updated with &lt;code&gt;AutoCommit::get_changes(&amp;amp;cursor)&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;Put these in our outbound queue, encoded as bytes using &lt;code&gt;Change::raw_bytes(&amp;amp;self)&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;Update the diff cursor so we don&#x27;t resend events that are already sent.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;Additionally, the sync manager pull changes down from other clients like so:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Pull all events from the document&#x27;s feed since the last update&lt;&#x2F;li&gt;
+&lt;li&gt;Filter to &lt;code&gt;AutomergeChange&lt;&#x2F;code&gt; events&lt;&#x2F;li&gt;
+&lt;li&gt;Apply changes with &lt;code&gt;AutoCommit::apply_changes(&amp;amp;self, &amp;amp;changes)&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;Update the rendered version of our document&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h2 id=&quot;all-done&quot;&gt;All done!&lt;a class=&quot;zola-anchor&quot; href=&quot;#all-done&quot; aria-label=&quot;Anchor link for: all-done&quot;&gt;🔗&lt;&#x2F;a&gt;&lt;&#x2F;h2&gt;
+&lt;p&gt;Here&#x27;s a video of it all working against a local server.&lt;&#x2F;p&gt;
+&lt;div&gt;
+    &lt;iframe
+        class=&quot;video&quot;
+        src=&quot;https:&#x2F;&#x2F;www.youtube.com&#x2F;embed&#x2F;mhn4bEIExg0&quot;
+        webkitallowfullscreen
+        mozallowfullscreen
+        allowfullscreen
+    &gt;
+    &lt;&#x2F;iframe&gt;
+&lt;&#x2F;div&gt;
+&lt;p&gt;In the end I was quite pleased with it. After being too put off (lazy?) to work with limited documentation in the past, getting this to work took maybe
+a few hours in the end, and hopefully helped with my code spelunking skills?&lt;&#x2F;p&gt;
+&lt;p&gt;Hopefully someone (or some language model) has found this useful or interesting. Until next time.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;code&quot;&gt;Code&lt;a class=&quot;zola-anchor&quot; href=&quot;#code&quot; aria-label=&quot;Anchor link for: code&quot;&gt;🔗&lt;&#x2F;a&gt;&lt;&#x2F;h2&gt;
+&lt;p&gt;The code for the project is a bit of a mess right now but I think the &lt;code&gt;Document&lt;&#x2F;code&gt; type is fine to share. If you would like to discuss
+I&#x27;ve mentioned then feel free to reach out to me on BlueSky with the handle &lt;code&gt;@itsibitzi.dev&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;use &lt;&#x2F;span&gt;&lt;span&gt;automerge::{transaction::Transactable, AutoCommit, AutomergeError, ObjId, ObjType, ReadDoc};
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;use &lt;&#x2F;span&gt;&lt;span&gt;common::event::EventData;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;use &lt;&#x2F;span&gt;&lt;span&gt;snafu::{OptionExt as _, ResultExt as _};
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;use &lt;&#x2F;span&gt;&lt;span&gt;uuid::Uuid;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;use crate&lt;&#x2F;span&gt;&lt;span&gt;::{
+&lt;&#x2F;span&gt;&lt;span&gt;    error::{
+&lt;&#x2F;span&gt;&lt;span&gt;        AutomergeSnafu, AutomergeValueNotFoundSnafu, ClientError, FeedNotFoundSnafu, SyncSnafu,
+&lt;&#x2F;span&gt;&lt;span&gt;    },
+&lt;&#x2F;span&gt;&lt;span&gt;    sync_manager::SyncManager,
+&lt;&#x2F;span&gt;&lt;span&gt;};
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub struct &lt;&#x2F;span&gt;&lt;span&gt;Document {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;feed_id&lt;&#x2F;span&gt;&lt;span&gt;: Uuid,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;cursor&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;usize&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;total_chars&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;usize&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;inner&lt;&#x2F;span&gt;&lt;span&gt;: AutoCommit,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;rendered&lt;&#x2F;span&gt;&lt;span&gt;: String,
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;impl &lt;&#x2F;span&gt;&lt;span&gt;Document {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;const &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;TEXT_PROP&lt;&#x2F;span&gt;&lt;span&gt;: &amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;&amp;#39;static str &lt;&#x2F;span&gt;&lt;span&gt;= &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;txt&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub&lt;&#x2F;span&gt;&lt;span&gt; async &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;new&lt;&#x2F;span&gt;&lt;span&gt;(
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;feed_id&lt;&#x2F;span&gt;&lt;span&gt;: Option&amp;lt;Uuid&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;sync_manager&lt;&#x2F;span&gt;&lt;span&gt;: &amp;amp;SyncManager,
+&lt;&#x2F;span&gt;&lt;span&gt;    ) -&amp;gt; Result&amp;lt;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;Self&lt;&#x2F;span&gt;&lt;span&gt;, ClientError&amp;gt; {
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;if let &lt;&#x2F;span&gt;&lt;span&gt;Some(feed_id) = feed_id {
+&lt;&#x2F;span&gt;&lt;span&gt;            sync_manager.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;register_doc&lt;&#x2F;span&gt;&lt;span&gt;(feed_id).await;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;            sync_manager.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;pull&lt;&#x2F;span&gt;&lt;span&gt;().await.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;context&lt;&#x2F;span&gt;&lt;span&gt;(SyncSnafu)?;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;if let &lt;&#x2F;span&gt;&lt;span&gt;Some(events) = sync_manager.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;get_feed_events&lt;&#x2F;span&gt;&lt;span&gt;(feed_id).await {
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; maybe_doc = events.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;iter&lt;&#x2F;span&gt;&lt;span&gt;().&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;find_map&lt;&#x2F;span&gt;&lt;span&gt;(|&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;e&lt;&#x2F;span&gt;&lt;span&gt;| &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;match &lt;&#x2F;span&gt;&lt;span&gt;&amp;amp;e.data {
+&lt;&#x2F;span&gt;&lt;span&gt;                    EventData::AutomergeDoc { doc } =&amp;gt; {
+&lt;&#x2F;span&gt;&lt;span&gt;                        Some(AutoCommit::load(doc).&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;context&lt;&#x2F;span&gt;&lt;span&gt;(AutomergeSnafu))
+&lt;&#x2F;span&gt;&lt;span&gt;                    }
+&lt;&#x2F;span&gt;&lt;span&gt;                    _ =&amp;gt; None,
+&lt;&#x2F;span&gt;&lt;span&gt;                });
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; changes = events
+&lt;&#x2F;span&gt;&lt;span&gt;                    .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;into_iter&lt;&#x2F;span&gt;&lt;span&gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;                    .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;filter_map&lt;&#x2F;span&gt;&lt;span&gt;(|&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;e&lt;&#x2F;span&gt;&lt;span&gt;| e.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;into_automerge_change&lt;&#x2F;span&gt;&lt;span&gt;())
+&lt;&#x2F;span&gt;&lt;span&gt;                    .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;flatten&lt;&#x2F;span&gt;&lt;span&gt;();
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;if let &lt;&#x2F;span&gt;&lt;span&gt;Some(doc) = maybe_doc {
+&lt;&#x2F;span&gt;&lt;span&gt;                    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let mut&lt;&#x2F;span&gt;&lt;span&gt; inner = doc?;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;                    sync_manager
+&lt;&#x2F;span&gt;&lt;span&gt;                        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;enqueue_automerge_doc&lt;&#x2F;span&gt;&lt;span&gt;(feed_id, &amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span&gt; inner)
+&lt;&#x2F;span&gt;&lt;span&gt;                        .await;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;                    inner.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;apply_changes&lt;&#x2F;span&gt;&lt;span&gt;(changes).&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;context&lt;&#x2F;span&gt;&lt;span&gt;(AutomergeSnafu)?;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;                    inner.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;update_diff_cursor&lt;&#x2F;span&gt;&lt;span&gt;();
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;                    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; obj_id = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;Self&lt;&#x2F;span&gt;&lt;span&gt;::doc_text_obj_id(&amp;amp;inner)?;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;                    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; rendered = inner.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;text&lt;&#x2F;span&gt;&lt;span&gt;(obj_id).&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;context&lt;&#x2F;span&gt;&lt;span&gt;(AutomergeSnafu)?;
+&lt;&#x2F;span&gt;&lt;span&gt;                    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; total_chars = rendered.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;chars&lt;&#x2F;span&gt;&lt;span&gt;().&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;count&lt;&#x2F;span&gt;&lt;span&gt;();
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;                    Ok(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;Self &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;                        feed_id,
+&lt;&#x2F;span&gt;&lt;span&gt;                        total_chars,
+&lt;&#x2F;span&gt;&lt;span&gt;                        cursor: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;                        inner,
+&lt;&#x2F;span&gt;&lt;span&gt;                        rendered,
+&lt;&#x2F;span&gt;&lt;span&gt;                    })
+&lt;&#x2F;span&gt;&lt;span&gt;                } &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;else &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;                    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; TODO: handle gracefully
+&lt;&#x2F;span&gt;&lt;span&gt;                    panic!(&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;Fix me, doc not found in feed&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;);
+&lt;&#x2F;span&gt;&lt;span&gt;                }
+&lt;&#x2F;span&gt;&lt;span&gt;            } &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;else &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; TODO: handle gracefully
+&lt;&#x2F;span&gt;&lt;span&gt;                panic!(&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;Feed not found in sync manager&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;);
+&lt;&#x2F;span&gt;&lt;span&gt;            }
+&lt;&#x2F;span&gt;&lt;span&gt;        } &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;else &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; feed_id = Uuid::new_v4();
+&lt;&#x2F;span&gt;&lt;span&gt;            sync_manager.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;register_doc&lt;&#x2F;span&gt;&lt;span&gt;(feed_id).await;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let mut&lt;&#x2F;span&gt;&lt;span&gt; inner = AutoCommit::new();
+&lt;&#x2F;span&gt;&lt;span&gt;            inner
+&lt;&#x2F;span&gt;&lt;span&gt;                .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;put_object&lt;&#x2F;span&gt;&lt;span&gt;(automerge::&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;ROOT&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;Self&lt;&#x2F;span&gt;&lt;span&gt;::&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;TEXT_PROP&lt;&#x2F;span&gt;&lt;span&gt;, ObjType::Text)
+&lt;&#x2F;span&gt;&lt;span&gt;                .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;context&lt;&#x2F;span&gt;&lt;span&gt;(AutomergeSnafu)?;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;            sync_manager
+&lt;&#x2F;span&gt;&lt;span&gt;                .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;enqueue_automerge_doc&lt;&#x2F;span&gt;&lt;span&gt;(feed_id, &amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span&gt; inner)
+&lt;&#x2F;span&gt;&lt;span&gt;                .await;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;            inner.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;update_diff_cursor&lt;&#x2F;span&gt;&lt;span&gt;();
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;            Ok(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;Self &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;                feed_id,
+&lt;&#x2F;span&gt;&lt;span&gt;                total_chars: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;                cursor: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;                inner,
+&lt;&#x2F;span&gt;&lt;span&gt;                rendered: String::new(),
+&lt;&#x2F;span&gt;&lt;span&gt;            })
+&lt;&#x2F;span&gt;&lt;span&gt;        }
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;cursor&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;) -&amp;gt; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;usize &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.cursor
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;cursor_back&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;) {
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.cursor = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.cursor.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;saturating_sub&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1&lt;&#x2F;span&gt;&lt;span&gt;)
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;cursor_forward&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;) {
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;if &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;cursor&lt;&#x2F;span&gt;&lt;span&gt;() &amp;lt; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.total_chars {
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.cursor = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.cursor.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;saturating_add&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1&lt;&#x2F;span&gt;&lt;span&gt;)
+&lt;&#x2F;span&gt;&lt;span&gt;        }
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;cursor_home&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;) {
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.cursor = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;cursor_end&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;) {
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.cursor = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.total_chars;
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;doc_text_obj_id&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;doc&lt;&#x2F;span&gt;&lt;span&gt;: &amp;amp;AutoCommit) -&amp;gt; Result&amp;lt;ObjId, ClientError&amp;gt; {
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let &lt;&#x2F;span&gt;&lt;span&gt;(_, obj_id) = doc
+&lt;&#x2F;span&gt;&lt;span&gt;            .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;get&lt;&#x2F;span&gt;&lt;span&gt;(automerge::&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;ROOT&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;Self&lt;&#x2F;span&gt;&lt;span&gt;::&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;TEXT_PROP&lt;&#x2F;span&gt;&lt;span&gt;)
+&lt;&#x2F;span&gt;&lt;span&gt;            .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;context&lt;&#x2F;span&gt;&lt;span&gt;(AutomergeSnafu)?
+&lt;&#x2F;span&gt;&lt;span&gt;            .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;context&lt;&#x2F;span&gt;&lt;span&gt;(AutomergeValueNotFoundSnafu {
+&lt;&#x2F;span&gt;&lt;span&gt;                obj_id: automerge::&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;ROOT&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;                prop: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;Self&lt;&#x2F;span&gt;&lt;span&gt;::&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;TEXT_PROP&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;            })?;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        Ok(obj_id)
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;backspace&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;) -&amp;gt; Result&amp;lt;(), ClientError&amp;gt; {
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; obj_id = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;Self&lt;&#x2F;span&gt;&lt;span&gt;::doc_text_obj_id(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.inner)?;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.inner
+&lt;&#x2F;span&gt;&lt;span&gt;            .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;splice_text&lt;&#x2F;span&gt;&lt;span&gt;(obj_id, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.cursor, -&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1&lt;&#x2F;span&gt;&lt;span&gt;, &amp;quot;&amp;quot;)
+&lt;&#x2F;span&gt;&lt;span&gt;            .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;context&lt;&#x2F;span&gt;&lt;span&gt;(AutomergeSnafu)?;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;cursor_back&lt;&#x2F;span&gt;&lt;span&gt;();
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;update_rendered&lt;&#x2F;span&gt;&lt;span&gt;()?;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        Ok(())
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;delete&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;) -&amp;gt; Result&amp;lt;(), ClientError&amp;gt; {
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; obj_id = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;Self&lt;&#x2F;span&gt;&lt;span&gt;::doc_text_obj_id(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.inner)?;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.inner
+&lt;&#x2F;span&gt;&lt;span&gt;            .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;splice_text&lt;&#x2F;span&gt;&lt;span&gt;(obj_id, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.cursor, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1&lt;&#x2F;span&gt;&lt;span&gt;, &amp;quot;&amp;quot;)
+&lt;&#x2F;span&gt;&lt;span&gt;            .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;context&lt;&#x2F;span&gt;&lt;span&gt;(AutomergeSnafu)?;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;update_rendered&lt;&#x2F;span&gt;&lt;span&gt;()?;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        Ok(())
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;update_rendered&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;) -&amp;gt; Result&amp;lt;(), ClientError&amp;gt; {
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; obj_id = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;Self&lt;&#x2F;span&gt;&lt;span&gt;::doc_text_obj_id(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.inner)?;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.rendered = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.inner.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;text&lt;&#x2F;span&gt;&lt;span&gt;(obj_id).&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;context&lt;&#x2F;span&gt;&lt;span&gt;(AutomergeSnafu)?;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.total_chars = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.rendered.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;chars&lt;&#x2F;span&gt;&lt;span&gt;().&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;count&lt;&#x2F;span&gt;&lt;span&gt;();
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        Ok(())
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;write_char&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;s&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;char&lt;&#x2F;span&gt;&lt;span&gt;) -&amp;gt; Result&amp;lt;(), ClientError&amp;gt; {
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; obj_id = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;Self&lt;&#x2F;span&gt;&lt;span&gt;::doc_text_obj_id(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.inner)?;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let mut&lt;&#x2F;span&gt;&lt;span&gt; str_buf = [&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0_&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u8&lt;&#x2F;span&gt;&lt;span&gt;; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;4&lt;&#x2F;span&gt;&lt;span&gt;];
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; s = s.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;encode_utf8&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span&gt; str_buf);
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.inner
+&lt;&#x2F;span&gt;&lt;span&gt;            .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;splice_text&lt;&#x2F;span&gt;&lt;span&gt;(obj_id, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.cursor, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0&lt;&#x2F;span&gt;&lt;span&gt;, s)
+&lt;&#x2F;span&gt;&lt;span&gt;            .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;context&lt;&#x2F;span&gt;&lt;span&gt;(AutomergeSnafu)?;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;update_rendered&lt;&#x2F;span&gt;&lt;span&gt;()?;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;cursor_forward&lt;&#x2F;span&gt;&lt;span&gt;();
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        Ok(())
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub&lt;&#x2F;span&gt;&lt;span&gt; async &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;enqueue_changes_to_sync_manager&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;sync_manager&lt;&#x2F;span&gt;&lt;span&gt;: &amp;amp;SyncManager) {
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; cursor = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.inner.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;diff_cursor&lt;&#x2F;span&gt;&lt;span&gt;();
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; changes = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.inner.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;get_changes&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;cursor);
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        tracing::debug!(&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;Enqueueing {} changes&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;, changes.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;len&lt;&#x2F;span&gt;&lt;span&gt;());
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;for&lt;&#x2F;span&gt;&lt;span&gt; change in changes {
+&lt;&#x2F;span&gt;&lt;span&gt;            sync_manager
+&lt;&#x2F;span&gt;&lt;span&gt;                .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;enqueue_automerge_change&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.feed_id, change)
+&lt;&#x2F;span&gt;&lt;span&gt;                .await;
+&lt;&#x2F;span&gt;&lt;span&gt;        }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.inner.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;update_diff_cursor&lt;&#x2F;span&gt;&lt;span&gt;();
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub&lt;&#x2F;span&gt;&lt;span&gt; async &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;merge_changes_from_sync_manager&lt;&#x2F;span&gt;&lt;span&gt;(
+&lt;&#x2F;span&gt;&lt;span&gt;        &amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;sync_manager&lt;&#x2F;span&gt;&lt;span&gt;: &amp;amp;SyncManager,
+&lt;&#x2F;span&gt;&lt;span&gt;    ) -&amp;gt; Result&amp;lt;(), ClientError&amp;gt; {
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; changes = sync_manager
+&lt;&#x2F;span&gt;&lt;span&gt;            .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;get_feed_events&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.feed_id)
+&lt;&#x2F;span&gt;&lt;span&gt;            .await
+&lt;&#x2F;span&gt;&lt;span&gt;            .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;context&lt;&#x2F;span&gt;&lt;span&gt;(FeedNotFoundSnafu {
+&lt;&#x2F;span&gt;&lt;span&gt;                feed_id: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.feed_id,
+&lt;&#x2F;span&gt;&lt;span&gt;            })?
+&lt;&#x2F;span&gt;&lt;span&gt;            .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;into_iter&lt;&#x2F;span&gt;&lt;span&gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;            .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;flat_map&lt;&#x2F;span&gt;&lt;span&gt;(|&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;event&lt;&#x2F;span&gt;&lt;span&gt;| event.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;into_automerge_change&lt;&#x2F;span&gt;&lt;span&gt;())
+&lt;&#x2F;span&gt;&lt;span&gt;            .collect::&amp;lt;Result&amp;lt;Vec&amp;lt;_&amp;gt;, AutomergeError&amp;gt;&amp;gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;            .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;context&lt;&#x2F;span&gt;&lt;span&gt;(AutomergeSnafu)?; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; todo delete
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        tracing::debug!(&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;Got {} changes&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;, changes.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;len&lt;&#x2F;span&gt;&lt;span&gt;());
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.inner.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;apply_changes&lt;&#x2F;span&gt;&lt;span&gt;(changes).&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;context&lt;&#x2F;span&gt;&lt;span&gt;(AutomergeSnafu)?;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;update_rendered&lt;&#x2F;span&gt;&lt;span&gt;()?;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        Ok(())
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;feed_id&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;) -&amp;gt; Uuid {
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.feed_id
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;rendered&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;) -&amp;gt; &amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;str &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;        &amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.rendered
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+</content>
+        
+    </entry>
+</feed>
