@@ -21,13 +21,13 @@ for now I just want to jot down my experience using the Automerge Rust library.
 
 The Automerge team have a very clear focus on providing an excellent experience for folks using the JavaScript libraries which they make very
 clear in the project README. Despite the clear warnings I forged ahead making a Rust TUI which allowed two people to register to a document
-stored on a server and make updates which would syncronize automatically.
+stored on a server and make updates which would synchronize automatically.
 
 ## Synchronization
 
 The Automerge team provide libraries in JavaScript and Rust for creating repos with synchronization as a first-class concept. Unfortunately,
-these libraries don't really prioritise end-to-end encryption which is what I want in the long run. There are currently efforts within
-Ink and Switch to implement the next generation sync protocol, end-to-end encryption and access control primatives.
+these libraries don't really prioritize end-to-end encryption which is what I want in the long run. There are currently efforts within
+Ink and Switch to implement the next generation sync protocol, end-to-end encryption and access control primitives.
 Eventually I will probably migrate to use these, but for now I just rolled my own which only took a few hours and was interesting anyway.
 
 The approach I took was very simple. Each document has a UUID `feed_id` which each have a series of `events`. I stuck these in a Postgres
@@ -66,10 +66,10 @@ before delving deeper into that.
 I thought it would be interesting to get a rough idea of how many events I could `GET` and `POST` so I hooked up Grafana and Prometheus using
 docker compose and with a bit of help from Claude 3.5 I was able to get some useful graphs within an hour. The actual performance of the sync
 server isn't that interesting, it was more than enough for my prototypes, but I was blow away with how useful LLMs can be when you know what
-you want but are unfamilar with a technology. With a couple of prompts I was able to configure Prometheus and Grafana to come up and with all
+you want but are unfamiliar with a technology. With a couple of prompts I was able to configure Prometheus and Grafana to come up and with all
 their plumbing in place, and the graphs ready to view even after a `docker compose down -v && docker compose up -d`.
 
-I also have to add how much I *love* Rust's `metrics` crate. In my case combined `metrics-exporter-prometheus` and `axum-prometheus`, though there
+I also have to add how much I _love_ Rust's `metrics` crate. In my case combined `metrics-exporter-prometheus` and `axum-prometheus`, though there
 was a small gotcha that I needed to call the `axum_prometheus::metrics::counter!` macro instead of just `metrics::counter!` for my custom metrics
 to appear on my Prometheus end point.
 
@@ -86,17 +86,18 @@ which helped me understand some of the lingo.
 In the end to get a full understanding I went to the Automerge community discord where the maintainer `pvh` helpfully explained:
 
 > You could think of a "change" as a "transaction", whereas a patch moves a materialized state between two points. Imagine setting a value like
-> this: state 0:  "foo", state 1: "bar", state 2: "foo". This is two changes, but a diff between state 0 and state 2 would be empty.
+> this: state 0: "foo", state 1: "bar", state 2: "foo". This is two changes, but a diff between state 0 and state 2 would be empty.
 
 A great clarification!
 
 After a few hours of toing and froing I eventually landed on the `Document` type based on the `automerge::AutoCommit` type. I then wrapped this in a
 very basic `LineEditor` type and a `ratatui` interface.
 
-Wworking with `AutoCommit` came down to a few basic flows: creating a new document, loading an existing document, updating the local working copy
+Working with `AutoCommit` came down to a few basic flows: creating a new document, loading an existing document, updating the local working copy
 and pushing/pulling changes to my sync manager.
 
 For a new document:
+
 - Create feed with random ID
 - Create `AutoCommit` document
 - Add hard-coded top level text prop.
@@ -108,6 +109,7 @@ Note that the document diff cursor is different to what I will refer to as the c
 over the changes in our Automerge document. The character or UI cursor is the position we insert new characters and render in our UI.
 
 When loading an existing document:
+
 - Fetch all the events for the provided `feed_id`
 - Get the `AutomergeDoc` event (should be the first one)
 - Load it with `AutoCommit::load(&bytes)`
@@ -116,20 +118,21 @@ When loading an existing document:
 - Go to event loop
 
 Inside the event loop we detect key strokes then apply the appropriate function to `splice_text`, update our UI cursor to the right
-character offset (*not* byte offset, remember Rust strings are UTF-8) and render out a new `String` for our TUI to display.
+character offset (_not_ byte offset, remember Rust strings are UTF-8) and render out a new `String` for our TUI to display.
 
 Periodically the sync manager will need to get all the modifications to the document since the last iteration. To do this we do the following:
+
 - Get the current diff cursor.
 - Get all the changes since the cursor was last updated with `AutoCommit::get_changes(&cursor)`
 - Put these in our outbound queue, encoded as bytes using `Change::raw_bytes(&self)`
 - Update the diff cursor so we don't resend events that are already sent.
 
 Additionally, the sync manager pull changes down from other clients like so:
+
 - Pull all events from the document's feed since the last update
 - Filter to `AutomergeChange` events
 - Apply changes with `AutoCommit::apply_changes(&self, &changes)`
 - Update the rendered version of our document
-
 
 ## All done!
 

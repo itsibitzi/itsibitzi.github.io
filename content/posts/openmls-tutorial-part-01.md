@@ -8,6 +8,8 @@ was to turn it into a tutorial.
 
 So this is it.
 
+I'll be updating this series *very* sporadically when I find the time so don't expect anything soon.
+
 ## What is (Open)MLS
 
 Message Layer Security (MLS) is a relatively new protocol aimed at providing a security layer for end-to-end encrypted (E2EE) applications.

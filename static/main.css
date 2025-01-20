@@ -62,6 +62,25 @@ blockquote > p {
     width: 80%;
     aspect-ratio: 16 / 9;
 }
+
+.zola-anchor {
+    opacity: 0;
+    font-size: 0.8em;
+    padding-left: 0.5em;
+    text-decoration: none;
+    filter: brightness(0%) contrast(100%);
+    color: #666;
+}
+
+h1:hover .zola-anchor,
+h2:hover .zola-anchor,
+h3:hover .zola-anchor,
+h4:hover .zola-anchor,
+h5:hover .zola-anchor,
+h6:hover .zola-anchor {
+    opacity: 1;
+}
+
 /**/
 /* Code stuff copied from zola website */
 /**/
